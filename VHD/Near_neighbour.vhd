@@ -11,8 +11,8 @@ entity Near_neighbour is
 		data 		: in std_logic_vector((4*DATA_WIDTH) -1 downto 0);
 		request : in std_logic;
 		ack 		: out std_logic := '0';
-		interrupt : out std_logic;
-		result  : out std_logic
+		interrupt : out std_logic := '0';
+		result  : out std_logic := '0'
 	);
 
 end entity;
@@ -20,13 +20,13 @@ end entity;
 architecture rtl of Near_neighbour is
 
 	-- input signals
-	signal x1_sg,x2_sg,y1_sg,y2_sg : std_logic_vector((DATA_WIDTH) -1 downto 0) := (others => '0');
+	signal x1_sg,x2_sg,y1_sg,y2_sg,fix_x,fix_y : std_logic_vector((DATA_WIDTH) -1 downto 0) := (others => '0');
 
 	type state_type is (s0,s1, s2);
 	signal state   : state_type := s0;
 
 	-- Distance euclidian output
-	signal de_result_sg : std_logic_vector((2*DATA_WIDTH) -1 downto 0) := (others => '0');
+	signal de_result_sg1,de_result_sg2 : std_logic_vector((2*DATA_WIDTH) -1 downto 0) := (others => '0');
 
 	-- signal that holds zero and its turned into one onece that state machine ack
 	-- that is requesting sending
@@ -37,14 +37,15 @@ architecture rtl of Near_neighbour is
 	-- aux = 01 -> read to recive minimum Distance
 	-- aux = 10 -> recived minimum Distance
 	-- aux = 11 -> read to recive minimum neighbour
-	signal aux : std_logic_vector(1 downto 0) := "00";
+	signal aux : std_logic_vector(2 downto 0) := "000";
 
 	signal min_distance,min_neighbours :  std_logic_vector((4*DATA_WIDTH) -1 downto 0):= (others => '0');
 
 	-- counter with the amount of min_neighbours
-	signal neigh_numb : std_logic_vector((4*DATA_WIDTH) -1 downto 0):= (others => '0');
-	signal one : unsigned(15 downto 0):= "0000000000000001";
-
+	signal neigh_numb_total,neigh_numb1,neigh_numb2 : std_logic_vector((4*DATA_WIDTH) -1 downto 0):= (others => '0');
+	constant one : unsigned(15 downto 0):= "0000000000000001";
+	
+	
 	-- interrupt
 	signal interrupt_sg : std_logic := '0';
 
@@ -68,23 +69,34 @@ begin
 		if (falling_edge(clk)) then
 			if reset = '1' then
 				state <= s0;
-				aux <= "00";
-			elsif (state = s0 and request = '1' and aux ="00") then
+				aux <= "000";
+			elsif (state = s0 and request = '1' and aux ="000") then
 				-- in the state zero first recive the minimum distance and second
 				-- the minimum neighbours from the data chanel
 				ack <= '1';
-				aux <= "01";
-			elsif (state = s0 and request = '0' and aux = "01") then
+				aux <= "001";
+			elsif (state = s0 and request = '0' and aux = "001") then
 				ack <= '0';
 				min_distance <= data;
-				aux <= "10";
-			elsif (state = s0 and request = '1' and aux = "10") then
+				aux <= "010";
+			elsif (state = s0 and request = '1' and aux = "010") then
 				ack <= '1';
-				aux <= "11";
-			elsif (state = s0 and request = '0' and aux = "11") then
+				aux <= "011";
+			elsif (state = s0 and request = '0' and aux = "011") then
 				ack <= '0';
 				min_neighbours <= data;
+				aux <= "100";
+			elsif (state = s0 and request = '1' and aux = "100") then
+				ack <= '1';
+				aux <= "110";
+			elsif (state = s0 and request = '0' and aux = "110") then
+				ack <= '0';
+				fix_y <= data((DATA_WIDTH) -1 downto 0);
+				fix_x <= data((2*DATA_WIDTH) -1 downto (DATA_WIDTH) );
+				aux <= "111";
+				aux <= "111";
 				state <= s1;
+
 
 			elsif (state = s1 and request = '1') then
 				--val <= '1';
@@ -117,32 +129,57 @@ begin
 		end if;
 	end process;
 
-	euclidian : Dist_eucl
+	euclidian1 : Dist_eucl
 	generic map (DATA_WIDTH => 8)
 	port map (
 				clk		=> clk,
 				reset	=> reset,
 				x1 		=> x1_sg,
-				x2 		=> x2_sg,
+				x2 		=> fix_x,
 				y1 		=> y1_sg,
-				y2 		=> y2_sg,
-				result => de_result_sg
+				y2 		=> fix_y,
+				result => de_result_sg1
+				);
+
+	euclidian2 : Dist_eucl
+	generic map (DATA_WIDTH => 8)
+	port map (
+				clk		=> clk,
+				reset	=> reset,
+				x1 		=> x2_sg,
+				x2 		=> fix_x,
+				y1 		=> y2_sg,
+				y2 		=> fix_y,
+				result => de_result_sg2
 				);
 
 	process(clk)
 	begin
 		if (rising_edge(clk)) then
 			if(reset = '1') then
-				neigh_numb <= (others => '0');
-			elsif((de_result_sg >= min_distance) and (aux = "11") ) then
-				neigh_numb <= std_logic_vector(unsigned(neigh_numb) + unsigned(one));
+				neigh_numb1 <= (others => '0');
+			elsif((de_result_sg1 >= min_distance) and (aux = "111") ) then
+				neigh_numb1 <= std_logic_vector(unsigned(neigh_numb1) + unsigned(one));
 			end if;
 		end if;
 	end process;
 
-	process(neigh_numb)
+	process(clk)
 	begin
-		if(min_neighbours = neigh_numb and (aux = "11")) then
+		if (rising_edge(clk)) then
+			if(reset = '1') then
+				neigh_numb2 <= (others => '0');
+			elsif((de_result_sg2 >= min_distance) and (aux = "111") ) then
+				neigh_numb2 <= std_logic_vector(unsigned(neigh_numb2) + unsigned(one));
+			end if;
+		end if;
+	end process;
+
+	neigh_numb_total <= std_logic_vector(unsigned(neigh_numb2) + unsigned(neigh_numb1));
+
+	process(neigh_numb_total)
+	begin
+		if(min_neighbours = neigh_numb_total and (aux = "111")) then
 			interrupt_sg <= '1';
 			result <= '1';
 		else

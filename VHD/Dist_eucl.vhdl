@@ -32,7 +32,7 @@ architecture rtl of Dist_eucl is
 	signal sub1,sub2 : std_logic_vector(DATA_WIDTH -1 downto 0);
 
 	-- Adds zeros
-	signal zeros :std_logic_vector(((2*DATA_WIDTH) -1) downto 0):=(others => '0');
+	constant zeros :std_logic_vector(((2*DATA_WIDTH) -1) downto 0):=(others => '0');
 
 	function  sqrt  ( d : UNSIGNED ) return UNSIGNED is
 	  variable a : unsigned(31 downto 0):=d;  --original input.
