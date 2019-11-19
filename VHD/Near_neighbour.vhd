@@ -44,8 +44,8 @@ architecture rtl of Near_neighbour is
 	-- counter with the amount of min_neighbours
 	signal neigh_numb_total,neigh_numb1,neigh_numb2 : std_logic_vector((4*DATA_WIDTH) -1 downto 0):= (others => '0');
 	constant one : unsigned(15 downto 0):= "0000000000000001";
-	
-	
+
+
 	-- interrupt
 	signal interrupt_sg : std_logic := '0';
 
@@ -66,66 +66,80 @@ begin
 
 	process (clk, reset)
 	begin
-		if (falling_edge(clk)) then
-			if reset = '1' then
-				state <= s0;
-				aux <= "000";
-			elsif (state = s0 and request = '1' and aux ="000") then
-				-- in the state zero first recive the minimum distance and second
-				-- the minimum neighbours from the data chanel
-				ack <= '1';
-				aux <= "001";
-			elsif (state = s0 and request = '0' and aux = "001") then
-				ack <= '0';
-				min_distance <= data;
-				aux <= "010";
-			elsif (state = s0 and request = '1' and aux = "010") then
-				ack <= '1';
-				aux <= "011";
-			elsif (state = s0 and request = '0' and aux = "011") then
-				ack <= '0';
-				min_neighbours <= data;
-				aux <= "100";
-			elsif (state = s0 and request = '1' and aux = "100") then
-				ack <= '1';
-				aux <= "110";
-			elsif (state = s0 and request = '0' and aux = "110") then
-				ack <= '0';
-				fix_y <= data((DATA_WIDTH) -1 downto 0);
-				fix_x <= data((2*DATA_WIDTH) -1 downto (DATA_WIDTH) );
-				aux <= "111";
-				aux <= "111";
-				state <= s1;
+		if reset = '1' then
+			state <= s0;
+			aux <= "000";
+		elif (falling_edge(clk)) then
+			case state is
+				when s0 =>
+					if (request = '1' and aux ="000") then
+						-- in the state zero first recive the minimum distance and second
+						-- the minimum neighbours from the data chanel
+						ack <= '1';
+						aux <= "001";
+						state <= s0;
+					elsif (request = '0' and aux = "001") then
+						ack <= '0';
+						min_distance <= data;
+						aux <= "010";
+						state <= s0;
+					elsif (request = '1' and aux = "010") then
+						ack <= '1';
+						aux <= "011";
+						state <= s0;
+					elsif (request = '0' and aux = "011") then
+						ack <= '0';
+						min_neighbours <= data;
+						aux <= "100";
+						state <= s0;
+					elsif (request = '1' and aux = "100") then
+						ack <= '1';
+						aux <= "110";
+						state <= s0;
+					elsif (request = '0' and aux = "110") then
+						ack <= '0';
+						fix_y <= data((DATA_WIDTH) -1 downto 0);
+						fix_x <= data((2*DATA_WIDTH) -1 downto (DATA_WIDTH) );
+						aux <= "111";
+						aux <= "111";
+						state <= s1;
+					else
+						state <= s0;
+					end if;
 
+				when s1 =>
+					if request = '1' then
+						ack <= '1';
+						state <= s2;
 
-			elsif (state = s1 and request = '1') then
-				--val <= '1';
-				ack <= '1';
-				state <= s2;
+						x1_sg <= (others => '0');
+						x2_sg <= (others => '0');
+						y1_sg <= (others => '0');
+						y2_sg <= (others => '0');
+					else
+						state <= s1;
+					end if;
 
-				x1_sg <= (others => '0');
-				x2_sg <= (others => '0');
-				y1_sg <= (others => '0');
-				y2_sg <= (others => '0');
+				when s2 =>
+					if (request = '0') then
+						--val <= '0';
+						ack <= '0';
+						-- read the data from input chanel
+						x1_sg <= data((4*DATA_WIDTH) -1 downto (3*DATA_WIDTH) );
+						x2_sg <= data((3*DATA_WIDTH) -1 downto (2*DATA_WIDTH) );
+						y1_sg <= data((2*DATA_WIDTH) -1 downto (DATA_WIDTH) );
+						y2_sg <= data((DATA_WIDTH) -1 downto 0 );
+						state <= s1;
+					else	-- every time that it`s not sending the data recived from the processor
+								-- it must send zeros to the dist euclidian
+						x1_sg <= (others => '0');
+						x2_sg <= (others => '0');
+						y1_sg <= (others => '0');
+						y2_sg <= (others => '0');
 
-			elsif (state = s2 and request = '0' ) then
-				--val <= '0';
-				ack <= '0';
-				-- read the data from input chanel
-				x1_sg <= data((4*DATA_WIDTH) -1 downto (3*DATA_WIDTH) );
-				x2_sg <= data((3*DATA_WIDTH) -1 downto (2*DATA_WIDTH) );
-				y1_sg <= data((2*DATA_WIDTH) -1 downto (DATA_WIDTH) );
-				y2_sg <= data((DATA_WIDTH) -1 downto 0 );
-				state <= s1;
-
-			else	-- every time that it`s not sending the data recived from the processor
-						-- it must send zeros to the dist euclidian
-				x1_sg <= (others => '0');
-				x2_sg <= (others => '0');
-				y1_sg <= (others => '0');
-				y2_sg <= (others => '0');
-
-			end if;
+						state <= s2
+					end if;
+				end case;
 		end if;
 	end process;
 
@@ -187,7 +201,6 @@ begin
 			result <= '0';
 		end if;
 	end process;
-
 
 	interrupt <= interrupt_sg;
 
